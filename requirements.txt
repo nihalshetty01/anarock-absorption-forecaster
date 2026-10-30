@@ -1,0 +1,10 @@
+lightgbm==4.7.0
+scikit-learn==1.9.1
+shap==0.54.1
+pandas
+numpy
+joblib
+matplotlib
+streamlit
+plotly
+google-genai

@@ -1,0 +1,6 @@
+split,model,MAE_pts,within_10pts_pct,bias_pts,range_halfwidth_pts,coverage_pct
+A: random by project,Baseline (market x config median),10.66,56.7,-1.27,,
+A: random by project,LightGBM,8.22,67.5,0.38,,
+B: future launches (drift),Baseline (market x config median),10.27,55.9,6.32,,
+B: future launches (drift),LightGBM,6.89,73.7,-0.41,,
+A: random by project,LightGBM 80% range,,,,11.4,72.9

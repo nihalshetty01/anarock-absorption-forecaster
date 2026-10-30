@@ -115,6 +115,24 @@ class TestForecasterAcceptance(unittest.TestCase):
         self.assertEqual(len(exp["drivers"]), 10)
         self.assertEqual(len(exp["bullets"]), 3)
 
+    def test_project_mix_weighted_forecast(self):
+        """Test Project Mix: 1BHK:0, 2BHK:150, 3BHK:100, 4BHK:0 yields 2 active rows and weighted average."""
+        mix_input = {"1BHK": 0, "2BHK": 150, "3BHK": 100, "4BHK": 0}
+        df, summary = forecaster.project_mix_forecast(self.default_inputs, mix_input, self.bundle)
+        self.assertEqual(len(df), 2)  # only 2BHK and 3BHK active
+        self.assertEqual(summary["total_units"], 250)
+        self.assertGreater(summary["total_units_sold"], 0)
+        self.assertLessEqual(summary["total_units_sold"], 250)
+        self.assertGreaterEqual(summary["weighted_pct"], 0.0)
+        self.assertLessEqual(summary["weighted_pct"], 100.0)
+        # Verify units-weighted average formula
+        expected_pct = round(
+            (df.iloc[0]["units"] * df.iloc[0]["predicted_pct"] + df.iloc[1]["units"] * df.iloc[1]["predicted_pct"]) / 250,
+            1
+        )
+        self.assertAlmostEqual(summary["weighted_pct"], expected_pct, places=1)
+
+
 
 if __name__ == "__main__":
     unittest.main()

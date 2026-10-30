@@ -469,8 +469,97 @@ with tab_price:
 
 # ==================== TAB 2: UNIT-MIX COMPARISON ====================
 with tab_mix:
-    st.markdown("### Unit-Mix Demand Comparison")
-    st.caption("Simulates all 4 configurations with standard unit sizes at the current price premium/discount.")
+    st.markdown("### 🏗️ Project Mix (Multi-Configuration Forecast)")
+    st.caption("Enter the planned inventory across configurations for this project to calculate the blended, whole-project absorption forecast.")
+
+    # Small editable table where user enters units for 1BHK, 2BHK, 3BHK, and 4BHK (default 0, 150, 100, 0)
+    default_mix_data = pd.DataFrame([
+        {"Configuration": "1BHK", "Units": 0, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["1BHK"]},
+        {"Configuration": "2BHK", "Units": 150, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["2BHK"]},
+        {"Configuration": "3BHK", "Units": 100, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["3BHK"]},
+        {"Configuration": "4BHK", "Units": 0, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["4BHK"]},
+    ])
+
+    edited_mix = st.data_editor(
+        default_mix_data,
+        column_config={
+            "Configuration": st.column_config.TextColumn("Configuration", disabled=True),
+            "Default Carpet (sq ft)": st.column_config.NumberColumn("Default Carpet (sq ft)", disabled=True),
+            "Units": st.column_config.NumberColumn("Units", min_value=0, max_value=2000, step=10, required=True),
+        },
+        hide_index=True,
+        use_container_width=True,
+        key="project_mix_editor",
+    )
+
+    # Extract user entered unit counts
+    user_mix_dict = dict(zip(edited_mix["Configuration"], edited_mix["Units"]))
+
+    # Run project mix forecast using current sidebar settings at default carpet area
+    proj_df, proj_summary = forecaster.project_mix_forecast(inputs, user_mix_dict, bundle)
+
+    if proj_summary["total_units"] > 0:
+        # Determine pace status badge for whole project
+        wp_pct = proj_summary["weighted_pct"]
+        if wp_pct > 40.0:
+            wp_badge = '<span class="badge badge-fast">🟢 Fast Pace (>40%)</span>'
+        elif wp_pct >= 20.0:
+            wp_badge = '<span class="badge badge-moderate">🟡 Moderate Pace (20–40%)</span>'
+        else:
+            wp_badge = '<span class="badge badge-slow">🔴 Slow Pace (<20%)</span>'
+
+        st.markdown(
+            f"""
+            <div class="metric-card" style="margin-top: 14px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <div style="color: #475569 !important; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
+                            Whole-Project 12-Month Absorption Forecast (Units-Weighted)
+                        </div>
+                        <div class="metric-headline" style="color: #0f172a !important; font-size: 2.3rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
+                            {wp_pct:.1f}% sold across project
+                        </div>
+                        <div class="metric-subline" style="color: #334155 !important; font-size: 1.05rem;">
+                            Likely range: <strong style="color: #0f172a !important;">{proj_summary['weighted_low']:.1f}% – {proj_summary['weighted_high']:.1f}%</strong>
+                            &nbsp;·&nbsp;
+                            Total expected to sell: <strong style="color: #0f172a !important;">{proj_summary['total_units_sold']}</strong> of {proj_summary['total_units']} units in 12 months
+                        </div>
+                    </div>
+                    <div>
+                        {wp_badge}
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Show active configuration breakdown table
+        display_proj_df = proj_df.copy()
+        display_proj_df["price_per_sqft"] = display_proj_df["price_per_sqft"].apply(format_inr)
+        display_proj_df["predicted_pct"] = display_proj_df["predicted_pct"].apply(lambda v: f"{v:.1f}%")
+        display_proj_df["likely_range"] = proj_df.apply(lambda r: f"{r['low_pct']:.1f}% – {r['high_pct']:.1f}%", axis=1)
+        display_proj_df["units_sold_est"] = proj_df.apply(lambda r: f"≈ {r['units_sold_est']} of {r['units']} units", axis=1)
+
+        display_proj_df = display_proj_df[[
+            "configuration", "units", "carpet_area_sqft", "price_per_sqft", "predicted_pct", "likely_range", "units_sold_est"
+        ]].rename(columns={
+            "configuration": "Config",
+            "units": "Planned Units",
+            "carpet_area_sqft": "Carpet (sq ft)",
+            "price_per_sqft": "Price/sq ft",
+            "predicted_pct": "Forecast %",
+            "likely_range": "Likely Range",
+            "units_sold_est": "Units Sold Est.",
+        })
+        st.dataframe(display_proj_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("Please enter at least one unit configuration with units > 0 to view the whole-project forecast.")
+
+    st.divider()
+
+    st.markdown("#### 📊 Benchmark Comparison (Equal 150-Unit Scale)")
+    st.caption("How each BHK would perform under identical inventory sizing (150 units each) at the current price premium/discount.")
 
     mix_df, takeaway = forecaster.unit_mix(inputs, bundle)
     st.info(f"💡 **Takeaway:** {takeaway}")

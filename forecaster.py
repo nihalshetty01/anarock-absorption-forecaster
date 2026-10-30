@@ -423,3 +423,90 @@ def unit_mix(
     takeaway = f"{best_cfg} is expected to sell fastest here (+{diff} pts vs {other_cfg})."
 
     return df, takeaway
+
+
+def project_mix_forecast(
+    inputs: Dict[str, Any],
+    mix_dict: Dict[str, int],
+    bundle: Optional[Dict[str, Any]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Simulate absorption for a project-level inventory mix (e.g. 1BHK: 0, 2BHK: 150, 3BHK: 100, 4BHK: 0).
+    Runs the model for each configuration with units > 0 at its default carpet area,
+    and computes the units-weighted whole-project forecast and expected sales.
+    """
+    if bundle is None:
+        bundle = load_model()
+
+    micro_market = inputs["micro_market"]
+    base_psf = MARKET_BASE_PSF[micro_market]
+
+    if "price_vs_market_pct" in inputs:
+        pct = float(inputs["price_vs_market_pct"])
+    elif "price_per_sqft" in inputs:
+        pct = 100.0 * (float(inputs["price_per_sqft"]) / base_psf - 1.0)
+    else:
+        pct = 0.0
+
+    current_psf = int(round(base_psf * (1.0 + pct / 100.0)))
+
+    rows = []
+    total_project_units = 0
+    total_project_sold = 0
+    weighted_sum_pts = 0.0
+    weighted_sum_low = 0.0
+    weighted_sum_high = 0.0
+
+    for cfg in ["1BHK", "2BHK", "3BHK", "4BHK"]:
+        count = int(mix_dict.get(cfg, 0))
+        if count <= 0:
+            continue
+
+        test_inputs = dict(inputs)
+        test_inputs["configuration"] = cfg
+        test_inputs["carpet_area_sqft"] = CARPET_DEFAULT[cfg]
+        test_inputs["total_units"] = count
+        test_inputs["price_vs_market_pct"] = pct
+        test_inputs.pop("price_per_sqft", None)
+
+        pt, low, high = predict(test_inputs, bundle)
+        sold = int(round(count * pt / 100.0))
+
+        total_project_units += count
+        total_project_sold += sold
+        weighted_sum_pts += count * pt
+        weighted_sum_low += count * low
+        weighted_sum_high += count * high
+
+        rows.append({
+            "configuration": cfg,
+            "units": count,
+            "carpet_area_sqft": CARPET_DEFAULT[cfg],
+            "price_per_sqft": current_psf,
+            "predicted_pct": pt,
+            "low_pct": low,
+            "high_pct": high,
+            "units_sold_est": sold,
+        })
+
+    rows_df = pd.DataFrame(rows)
+
+    if total_project_units > 0:
+        overall_pct = round(weighted_sum_pts / total_project_units, 1)
+        overall_low = round(weighted_sum_low / total_project_units, 1)
+        overall_high = round(weighted_sum_high / total_project_units, 1)
+    else:
+        overall_pct = 0.0
+        overall_low = 0.0
+        overall_high = 0.0
+
+    summary = {
+        "total_units": total_project_units,
+        "total_units_sold": total_project_sold,
+        "weighted_pct": overall_pct,
+        "weighted_low": overall_low,
+        "weighted_high": overall_high,
+    }
+
+    return rows_df, summary
+

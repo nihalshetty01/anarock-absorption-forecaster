@@ -9,6 +9,10 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import forecaster
+import importlib
+
+# Ensure latest forecaster functions are reloaded on hot reload
+importlib.reload(forecaster)
 
 # Page configuration
 st.set_page_config(

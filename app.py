@@ -33,23 +33,28 @@ st.markdown(
         font-size: 0.95rem;
     }
     .metric-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
         border-radius: 12px;
         padding: 24px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -1px rgba(0,0,0,0.04);
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
         margin-bottom: 20px;
     }
     .metric-headline {
-        font-size: 2.4rem;
-        font-weight: 700;
+        font-size: 2.6rem !important;
+        font-weight: 800 !important;
+        color: #0f172a !important;
         margin-bottom: 6px;
         line-height: 1.1;
     }
     .metric-subline {
-        font-size: 1.05rem;
-        color: #4a5568;
+        font-size: 1.05rem !important;
+        color: #334155 !important;
         margin-bottom: 12px;
+    }
+    .metric-subline strong {
+        color: #0f172a !important;
+        font-weight: 700 !important;
     }
     .badge {
         display: inline-block;
@@ -64,12 +69,14 @@ st.markdown(
     .badge-moderate { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .badge-slow { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .bullet-item {
-        padding: 7px 12px;
+        padding: 8px 14px;
         margin-bottom: 6px;
-        background: #f8fafc;
-        border-left: 3px solid #cbd5e1;
+        background: #f1f5f9;
+        color: #0f172a !important;
+        border-left: 3px solid #3b82f6;
         border-radius: 0 6px 6px 0;
         font-size: 0.95rem;
+        font-weight: 500;
     }
     </style>
     """,
@@ -261,14 +268,16 @@ st.markdown(
     <div class="metric-card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
-                <div style="color: #64748b; font-size: 0.95rem; font-weight: 600; text-transform: uppercase;">
+                <div style="color: #475569 !important; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
                     12-Month Absorption Forecast
                 </div>
-                <div class="metric-headline">{point:.1f}% sold in 12 months</div>
-                <div class="metric-subline">
-                    Likely range: <strong>{low:.1f}% – {high:.1f}%</strong> (75–80% confidence)
+                <div class="metric-headline" style="color: #0f172a !important; font-size: 2.6rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
+                    {point:.1f}% sold in 12 months
+                </div>
+                <div class="metric-subline" style="color: #334155 !important; font-size: 1.05rem;">
+                    Likely range: <strong style="color: #0f172a !important;">{low:.1f}% – {high:.1f}%</strong> (75–80% confidence)
                     &nbsp;·&nbsp;
-                    ≈ <strong>{units_sold_est}</strong> of {total_units} {config} units
+                    ≈ <strong style="color: #0f172a !important;">{units_sold_est}</strong> of {total_units} {config} units
                 </div>
             </div>
             <div>

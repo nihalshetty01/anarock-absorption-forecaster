@@ -134,5 +134,41 @@ class TestForecasterAcceptance(unittest.TestCase):
 
 
 
+    def test_mixed_tower_acceptance_spec(self):
+        """
+        Acceptance Test for Mixed Tower Mode:
+        Shared: Hinjewadi, Tier 1, 42 mos, default Advanced.
+        2BHK: 150 units @ 750 sq ft, ₹10,000/sq ft -> 41.5%, 62 units sold, ₹46.50 cr.
+        3BHK: 100 units @ 1100 sq ft, ₹10,000/sq ft -> 36.2%, 36 units sold, ₹39.60 cr.
+        Whole tower: 39.4%, 98 of 250 units, ₹86.10 cr.
+        """
+        shared = dict(self.default_inputs)
+        inp_2bhk = {**shared, "configuration": "2BHK", "carpet_area_sqft": 750, "price_per_sqft": 10000, "total_units": 150}
+        inp_3bhk = {**shared, "configuration": "3BHK", "carpet_area_sqft": 1100, "price_per_sqft": 10000, "total_units": 100}
+
+        p2, l2, h2 = forecaster.predict(inp_2bhk, self.bundle)
+        p3, l3, h3 = forecaster.predict(inp_3bhk, self.bundle)
+
+        self.assertAlmostEqual(p2, 41.5, delta=0.5)
+        self.assertAlmostEqual(p3, 36.2, delta=0.5)
+
+        u2 = int(round(150 * p2 / 100.0))
+        u3 = int(round(100 * p3 / 100.0))
+        self.assertEqual(u2, 62)
+        self.assertEqual(u3, 36)
+
+        weighted_p = round((150 * p2 + 100 * p3) / 250.0, 1)
+        self.assertAlmostEqual(weighted_p, 39.4, delta=0.5)
+        self.assertEqual(u2 + u3, 98)
+
+        # Sales value in ₹ cr
+        cr2 = round((u2 * 750 * 10000) / 1e7, 2)
+        cr3 = round((u3 * 1100 * 10000) / 1e7, 2)
+        total_cr = round(cr2 + cr3, 2)
+        self.assertEqual(cr2, 46.50)
+        self.assertEqual(cr3, 39.60)
+        self.assertEqual(total_cr, 86.10)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -138,41 +138,136 @@ micro_market = st.sidebar.selectbox(
     help="Select the Pune micro-market. Sets the baseline benchmark price and local access midpoints.",
 )
 
-config = st.sidebar.selectbox(
-    "Unit Configuration",
-    options=bundle["cats"]["configuration"],
-    index=bundle["cats"]["configuration"].index("2BHK"),
-    help="Apartment configuration type.",
+# 1. New sidebar input: Tower type (placed right after Micro-market)
+tower_type = st.sidebar.radio(
+    "Tower type",
+    options=["Single configuration", "Mixed configuration"],
+    index=0,
+    help="Mixed = one tower or project with more than one unit type, e.g. 2BHK + 3BHK.",
 )
 
-carpet_min, carpet_max = forecaster.CARPET_RANGE[config]
-default_carpet = forecaster.CARPET_DEFAULT[config]
-carpet_area = st.sidebar.slider(
-    "Carpet Area (sq ft)",
-    min_value=int(carpet_min),
-    max_value=int(carpet_max),
-    value=int(default_carpet),
-    step=10,
-    help=f"RERA carpet area. Recommended range for {config}: {carpet_min}–{carpet_max} sq ft.",
-)
-
-# Price per sq ft
 base_psf = forecaster.MARKET_BASE_PSF[micro_market]
 default_psf = 10000 if micro_market == "Hinjewadi" else int(base_psf)
 
-price_psf = st.sidebar.number_input(
-    "Launch Price per sq ft (₹)",
-    min_value=int(base_psf * 0.5),
-    max_value=int(base_psf * 2.0),
-    value=default_psf,
-    step=100,
-    help=f"Planned launch price per sq ft. Local market benchmark is {format_inr(base_psf)}/sq ft.",
-)
+if tower_type == "Single configuration":
+    # 2. Single configuration mode
+    config = st.sidebar.selectbox(
+        "Unit Configuration",
+        options=bundle["cats"]["configuration"],
+        index=bundle["cats"]["configuration"].index("2BHK"),
+        help="Apartment configuration type.",
+    )
 
-price_diff_pct = 100.0 * (price_psf / base_psf - 1.0)
-st.sidebar.caption(
-    f"📍 Market average: **{format_inr(base_psf)}/sq ft** → You are **{price_diff_pct:+.1f}%** vs benchmark."
-)
+    carpet_min, carpet_max = forecaster.CARPET_RANGE[config]
+    default_carpet = forecaster.CARPET_DEFAULT[config]
+    carpet_area = st.sidebar.slider(
+        "Carpet Area (sq ft)",
+        min_value=int(carpet_min),
+        max_value=int(carpet_max),
+        value=int(default_carpet),
+        step=10,
+        help=f"RERA carpet area. Recommended range for {config}: {carpet_min}–{carpet_max} sq ft.",
+    )
+
+    price_psf = st.sidebar.number_input(
+        "Launch Price per sq ft (₹)",
+        min_value=int(base_psf * 0.5),
+        max_value=int(base_psf * 2.0),
+        value=default_psf,
+        step=100,
+        help=f"Planned launch price per sq ft. Local market benchmark is {format_inr(base_psf)}/sq ft.",
+    )
+
+    price_diff_pct = 100.0 * (price_psf / base_psf - 1.0)
+    st.sidebar.caption(
+        f"📍 Market average: **{format_inr(base_psf)}/sq ft** → You are **{price_diff_pct:+.1f}%** vs benchmark."
+    )
+
+    total_units = st.sidebar.slider(
+        "Inventory of this Unit Type",
+        min_value=20,
+        max_value=420,
+        value=150,
+        step=10,
+        help="Total number of units of this specific configuration released at launch.",
+    )
+    mixed_configs = [config]
+    mixed_details = {}
+
+else:
+    # 3. Mixed configuration mode
+    mixed_configs = st.sidebar.multiselect(
+        "Configurations in this tower",
+        options=["1BHK", "2BHK", "3BHK", "4BHK"],
+        default=["2BHK", "3BHK"],
+        help="Select configurations present in this tower (require at least 2).",
+    )
+
+    price_psf = st.sidebar.number_input(
+        "Launch Price per sq ft (₹)",
+        min_value=int(base_psf * 0.5),
+        max_value=int(base_psf * 2.0),
+        value=default_psf,
+        step=100,
+        help=f"Default launch price per sq ft for configurations in this tower. Local benchmark: {format_inr(base_psf)}/sq ft.",
+    )
+    price_diff_pct = 100.0 * (price_psf / base_psf - 1.0)
+    st.sidebar.caption(
+        f"📍 Market average: **{format_inr(base_psf)}/sq ft** → Default is **{price_diff_pct:+.1f}%** vs benchmark."
+    )
+
+    # Dictionary to hold per-configuration details
+    mixed_details = {}
+    default_units_map = {"1BHK": 50, "2BHK": 150, "3BHK": 100, "4BHK": 50}
+
+    for cfg in mixed_configs:
+        c_min, c_max = forecaster.CARPET_RANGE[cfg]
+        c_def = forecaster.CARPET_DEFAULT[cfg]
+        u_def = default_units_map.get(cfg, 50)
+
+        with st.sidebar.expander(f"📦 {cfg} details", expanded=True):
+            cfg_carpet = st.slider(
+                f"Carpet area (sq ft) – {cfg}",
+                min_value=int(c_min),
+                max_value=int(c_max),
+                value=int(c_def),
+                step=10,
+                key=f"carpet_{cfg}",
+            )
+            cfg_units = st.number_input(
+                f"Units to sell (inventory) – {cfg}",
+                min_value=1,
+                max_value=2000,
+                value=int(u_def),
+                step=10,
+                key=f"units_{cfg}",
+            )
+            if cfg_units < 20 or cfg_units > 420:
+                st.caption("⚠️ Model was trained on 20–420 units per configuration.")
+
+            cfg_price = st.number_input(
+                f"Price per sq ft (₹) – {cfg}",
+                min_value=int(base_psf * 0.5),
+                max_value=int(base_psf * 2.0),
+                value=int(price_psf),
+                step=100,
+                key=f"price_{cfg}",
+                help=f"Defaults to the main Launch Price ({format_inr(price_psf)}/sq ft).",
+            )
+            cfg_diff = 100.0 * (cfg_price / base_psf - 1.0)
+            st.caption(f"{cfg_diff:+.1f}% vs {micro_market} benchmark")
+
+            mixed_details[cfg] = {
+                "carpet_area": cfg_carpet,
+                "units": cfg_units,
+                "price_psf": cfg_price,
+                "price_diff_pct": cfg_diff,
+            }
+
+    # Fallback placeholders for single config variables
+    config = mixed_configs[0] if mixed_configs else "2BHK"
+    carpet_area = mixed_details[config]["carpet_area"] if mixed_configs else 750
+    total_units = sum(d["units"] for d in mixed_details.values()) if mixed_configs else 150
 
 tier = st.sidebar.selectbox(
     "Developer Brand Tier",
@@ -180,15 +275,6 @@ tier = st.sidebar.selectbox(
     index=0,
     format_func=lambda x: forecaster.TIER_LABELS[x],
     help="Developer brand categorization. Tier 1 = national listed; Tier 2 = established regional; Tier 3 = small/new.",
-)
-
-total_units = st.sidebar.slider(
-    "Inventory of this Unit Type",
-    min_value=20,
-    max_value=420,
-    value=150,
-    step=10,
-    help="Total number of units of this specific configuration released at launch.",
 )
 
 months_possession = st.sidebar.slider(
@@ -228,18 +314,23 @@ with st.sidebar.expander("⚙️ Advanced Location & Market Timing"):
         help="Trailing 4-quarter citywide Pune residential sales growth at time of launch. Negative indicates cooling cycle.",
     )
 
-# Input parameters dictionary
-inputs = {
+# Common shared inputs
+shared_inputs = {
     "micro_market": micro_market,
-    "configuration": config,
-    "carpet_area_sqft": carpet_area,
-    "price_per_sqft": price_psf,
     "developer_tier": tier,
-    "total_units": total_units,
     "months_to_possession": months_possession,
     "dist_metro_km": dist_metro,
     "dist_it_hub_km": dist_it_hub,
     "market_sales_trend_pct": market_trend,
+}
+
+# Input parameters dictionary for single mode or primary baseline
+inputs = {
+    **shared_inputs,
+    "configuration": config,
+    "carpet_area_sqft": carpet_area,
+    "price_per_sqft": price_psf,
+    "total_units": total_units,
 }
 
 # Training distribution guardrail warnings
@@ -253,284 +344,48 @@ if market_trend < -17.0 or market_trend > 30.0:
         f"⚠️ **Market Trend Alert:** Trailing sales trend of {market_trend:+.1f}% is outside the core training range (−17% to +30%)."
     )
 
-# --- RUN PREDICTION & EXPLANATION ---
-point, low, high = forecaster.predict(inputs, bundle)
-units_sold_est = int(round(total_units * point / 100.0))
-exp_data = forecaster.explain(inputs, bundle)
+# --- EXECUTION & DISPLAY ---
 
-# Determine pace status badge
-if point > 40.0:
-    badge_html = '<span class="badge badge-fast">🟢 Fast Pace (>40%)</span>'
-elif point >= 20.0:
-    badge_html = '<span class="badge badge-moderate">🟡 Moderate Pace (20–40%)</span>'
+if tower_type == "Mixed configuration" and len(mixed_configs) < 2:
+    st.warning("⚠️ Select at least 2 configurations, or switch to Single configuration.")
 else:
-    badge_html = '<span class="badge badge-slow">🔴 Slow Pace (<20%)</span>'
+    if tower_type == "Single configuration":
+        # --- SINGLE MODE PREDICTION ---
+        point, low, high = forecaster.predict(inputs, bundle)
+        units_sold_est = int(round(total_units * point / 100.0))
+        sales_val_cr = (units_sold_est * carpet_area * price_psf) / 1e7
+        exp_data = forecaster.explain(inputs, bundle)
 
-# --- 3.3 FORECAST CARD ---
-st.markdown(
-    f"""
-    <div class="metric-card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div style="color: #475569 !important; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
-                    12-Month Absorption Forecast
-                </div>
-                <div class="metric-headline" style="color: #0f172a !important; font-size: 2.6rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
-                    {point:.1f}% sold in 12 months
-                </div>
-                <div class="metric-subline" style="color: #334155 !important; font-size: 1.05rem;">
-                    Likely range: <strong style="color: #0f172a !important;">{low:.1f}% – {high:.1f}%</strong> (75–80% confidence)
-                    &nbsp;·&nbsp;
-                    ≈ <strong style="color: #0f172a !important;">{units_sold_est}</strong> of {total_units} {config} units
-                </div>
-            </div>
-            <div>
-                {badge_html}
-            </div>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# --- 3.9 OPTIONAL: GEMINI "EXPLAIN LIKE I'M THE DEVELOPER" ---
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
-if not gemini_api_key:
-    try:
-        gemini_api_key = st.secrets.get("GEMINI_API_KEY")
-    except Exception:
-        gemini_api_key = None
-
-if gemini_api_key:
-    with st.expander("✨ Executive Pitch: Explain like I'm the developer"):
-        if st.button("Generate 4-Sentence Advisory Summary"):
-            with st.spinner("Synthesizing narrative with Gemini..."):
-                try:
-                    from google import genai
-
-                    client = genai.Client(api_key=gemini_api_key)
-                    prompt = f"""
-                    You are a senior real estate advisory partner at ANAROCK explaining a launch feasibility forecast to a developer's Strategy Head.
-                    Use ONLY the provided facts. Do NOT invent numbers or outside data.
-                    Mention the predicted range ({low:.1f}% to {high:.1f}%) and clearly note that this forecast is generated by a prototype trained on synthetic data calibrated to Pune benchmarks.
-                    Provide a concise 4-sentence summary covering the forecast, primary market drivers, and one actionable pricing suggestion.
-
-                    Project Details:
-                    - Micro-market: {micro_market}
-                    - Configuration: {config} ({carpet_area} sq ft)
-                    - Launch Price: Rs. {price_psf:,}/sq ft ({price_diff_pct:+.1f}% vs {micro_market} benchmark of Rs. {base_psf:,}/sq ft)
-                    - Developer Tier: {forecaster.TIER_LABELS[tier]}
-                    - Inventory: {total_units} units | Timeline: {months_possession} months
-                    - Forecast: {point:.1f}% (Range: {low:.1f}% – {high:.1f}%)
-                    - Top SHAP Drivers:
-                    {chr(10).join(['  * ' + b for b in exp_data['bullets']])}
-                    """
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=prompt,
-                    )
-                    st.markdown(f"**Advisory Brief:**\n\n{response.text}")
-                except Exception as e:
-                    st.error(f"Could not connect to Gemini API: {e}")
-
-# --- 3.4 WHY THIS FORECAST (EXPLAINABILITY) ---
-st.subheader("🔍 Why this forecast? (SHAP Attribution)")
-st.caption("How each project factor added or subtracted points from the base expectation.")
-
-col_chart, col_bullets = st.columns([3, 2])
-
-with col_chart:
-    # Top 6 drivers horizontal bar chart
-    top6 = exp_data["drivers"][:6][::-1]  # reverse to show largest at top
-    labels = [d["friendly_label"] for d in top6]
-    vals = [d["shap_value"] for d in top6]
-    colors = ["#10b981" if v >= 0 else "#ef4444" for v in vals]
-    custom_text = [f"{v:+.1f} pts ({d['display_val']})" for v, d in zip(vals, top6)]
-
-    fig_shap = go.Figure(
-        go.Bar(
-            x=vals,
-            y=labels,
-            orientation="h",
-            marker=dict(color=colors, line=dict(width=0)),
-            text=custom_text,
-            textposition="auto",
-            hovertemplate="<b>%{y}</b><br>Impact: %{x:+.2f} pts<extra></extra>",
-        )
-    )
-    fig_shap.update_layout(
-        margin=dict(l=10, r=10, t=10, b=10),
-        height=260,
-        xaxis=dict(title="Contribution (Percentage Points)", zeroline=True, zerolinecolor="#94a3b8"),
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(fig_shap, use_container_width=True)
-
-with col_bullets:
-    st.markdown("**Top Drivers for This Launch:**")
-    for b in exp_data["bullets"]:
-        st.markdown(f'<div class="bullet-item">• {b}</div>', unsafe_allow_html=True)
-    st.caption(f"Baseline expectation across Pune data: **{exp_data['base_value']:.1f}%**.")
-
-st.divider()
-
-# --- TABS FOR DEEP DIVES ---
-tab_price, tab_mix, tab_model, tab_reality = st.tabs([
-    "📈 Price What-If",
-    "📊 Unit-Mix Analysis",
-    "📋 Model Card & Trust",
-    "✅ Reality Check vs Real Projects",
-])
-
-# ==================== TAB 1: PRICE WHAT-IF ====================
-with tab_price:
-    st.markdown("### Price Sensitivity & Target Finder")
-    st.caption("Evaluate how changes in price per sq ft impact predicted absorption pace, holding all other features fixed.")
-
-    curve_df = forecaster.price_curve(inputs, bundle)
-
-    fig_curve = go.Figure()
-    # Confidence band shading
-    fig_curve.add_trace(
-        go.Scatter(
-            x=curve_df["price_per_sqft"],
-            y=curve_df["high_pct"],
-            mode="lines",
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-    fig_curve.add_trace(
-        go.Scatter(
-            x=curve_df["price_per_sqft"],
-            y=curve_df["low_pct"],
-            mode="lines",
-            line=dict(width=0),
-            fill="tonexty",
-            fillcolor="rgba(59, 130, 246, 0.15)",
-            name="Likely Range (±11.4 pts)",
-            hoverinfo="skip",
-        )
-    )
-    # Expected forecast line
-    fig_curve.add_trace(
-        go.Scatter(
-            x=curve_df["price_per_sqft"],
-            y=curve_df["predicted_pct"],
-            mode="lines+markers",
-            line=dict(color="#2563eb", width=3),
-            marker=dict(size=6),
-            name="Forecast Absorption %",
-            hovertemplate="Price: ₹%{x:,}/sq ft<br>Forecast: %{y:.1f}%<extra></extra>",
-        )
-    )
-    # Current price marker
-    fig_curve.add_trace(
-        go.Scatter(
-            x=[price_psf],
-            y=[point],
-            mode="markers+text",
-            marker=dict(color="#dc2626", size=12, symbol="diamond"),
-            name="Current Price",
-            text=[f"Current: {point:.1f}%"],
-            textposition="top right",
-            hovertemplate="Current Price: ₹%{x:,}/sq ft<br>Forecast: %{y:.1f}%<extra></extra>",
-        )
-    )
-
-    fig_curve.update_layout(
-        xaxis=dict(title="Launch Price per sq ft (₹)", tickprefix="₹", tickformat=","),
-        yaxis=dict(title="12-Month Absorption %", range=[0, 100]),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=20, r=20, t=30, b=20),
-        height=380,
-    )
-    st.plotly_chart(fig_curve, use_container_width=True)
-
-    # Target Finder
-    st.markdown("#### 🎯 Target Finder")
-    col_tgt1, col_tgt2 = st.columns([1, 2])
-    with col_tgt1:
-        target_goal = st.number_input(
-            "Target 12-Month Absorption (%)",
-            min_value=10.0,
-            max_value=90.0,
-            value=35.0,
-            step=1.0,
-            help="What sales pace does the developer need to achieve in year 1?",
-        )
-    with col_tgt2:
-        target_res = forecaster.max_price_for_target(inputs, target_goal, bundle)
-        if target_res["achievable"]:
-            st.success(
-                f"**Achievable Pricing Strategy:**\n\n"
-                f"Highest price that still hits **{target_goal:.0f}%**: "
-                f"**{format_inr(target_res['max_price_psf'])}/sq ft** ({target_res['price_vs_market_pct']:+.1f}% vs {micro_market} benchmark)."
-            )
+        # Determine pace status badge
+        if point > 40.0:
+            badge_html = '<span class="badge badge-fast">🟢 Fast Pace (>40%)</span>'
+        elif point >= 20.0:
+            badge_html = '<span class="badge badge-moderate">🟡 Moderate Pace (20–40%)</span>'
         else:
-            st.error(f"**Target Unreachable:** {target_res['message']}")
+            badge_html = '<span class="badge badge-slow">🔴 Slow Pace (<20%)</span>'
 
-# ==================== TAB 2: UNIT-MIX COMPARISON ====================
-with tab_mix:
-    st.markdown("### 🏗️ Project Mix (Multi-Configuration Forecast)")
-    st.caption("Enter the planned inventory across configurations for this project to calculate the blended, whole-project absorption forecast.")
-
-    # Small editable table where user enters units for 1BHK, 2BHK, 3BHK, and 4BHK (default 0, 150, 100, 0)
-    default_mix_data = pd.DataFrame([
-        {"Configuration": "1BHK", "Units": 0, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["1BHK"]},
-        {"Configuration": "2BHK", "Units": 150, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["2BHK"]},
-        {"Configuration": "3BHK", "Units": 100, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["3BHK"]},
-        {"Configuration": "4BHK", "Units": 0, "Default Carpet (sq ft)": forecaster.CARPET_DEFAULT["4BHK"]},
-    ])
-
-    edited_mix = st.data_editor(
-        default_mix_data,
-        column_config={
-            "Configuration": st.column_config.TextColumn("Configuration", disabled=True),
-            "Default Carpet (sq ft)": st.column_config.NumberColumn("Default Carpet (sq ft)", disabled=True),
-            "Units": st.column_config.NumberColumn("Units", min_value=0, max_value=2000, step=10, required=True),
-        },
-        hide_index=True,
-        use_container_width=True,
-        key="project_mix_editor",
-    )
-
-    # Extract user entered unit counts
-    user_mix_dict = dict(zip(edited_mix["Configuration"], edited_mix["Units"]))
-
-    # Run project mix forecast using current sidebar settings at default carpet area
-    proj_df, proj_summary = forecaster.project_mix_forecast(inputs, user_mix_dict, bundle)
-
-    if proj_summary["total_units"] > 0:
-        # Determine pace status badge for whole project
-        wp_pct = proj_summary["weighted_pct"]
-        if wp_pct > 40.0:
-            wp_badge = '<span class="badge badge-fast">🟢 Fast Pace (>40%)</span>'
-        elif wp_pct >= 20.0:
-            wp_badge = '<span class="badge badge-moderate">🟡 Moderate Pace (20–40%)</span>'
-        else:
-            wp_badge = '<span class="badge badge-slow">🔴 Slow Pace (<20%)</span>'
-
+        # 5. Single mode forecast card with 12m sales value
         st.markdown(
             f"""
-            <div class="metric-card" style="margin-top: 14px; margin-bottom: 20px;">
+            <div class="metric-card">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
                         <div style="color: #475569 !important; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
-                            Whole-Project 12-Month Absorption Forecast (Units-Weighted)
+                            12-Month Absorption Forecast
                         </div>
-                        <div class="metric-headline" style="color: #0f172a !important; font-size: 2.3rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
-                            {wp_pct:.1f}% sold across project
+                        <div class="metric-headline" style="color: #0f172a !important; font-size: 2.6rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
+                            {point:.1f}% sold in 12 months
                         </div>
                         <div class="metric-subline" style="color: #334155 !important; font-size: 1.05rem;">
-                            Likely range: <strong style="color: #0f172a !important;">{proj_summary['weighted_low']:.1f}% – {proj_summary['weighted_high']:.1f}%</strong>
+                            Likely range: <strong style="color: #0f172a !important;">{low:.1f}% – {high:.1f}%</strong> (75–80% confidence)
                             &nbsp;·&nbsp;
-                            Total expected to sell: <strong style="color: #0f172a !important;">{proj_summary['total_units_sold']}</strong> of {proj_summary['total_units']} units in 12 months
+                            ≈ <strong style="color: #0f172a !important;">{units_sold_est}</strong> of {total_units} {config} units
+                            &nbsp;·&nbsp;
+                            12-month sales value: <strong style="color: #0f172a !important;">₹{sales_val_cr:.2f} cr</strong>
                         </div>
                     </div>
                     <div>
-                        {wp_badge}
+                        {badge_html}
                     </div>
                 </div>
             </div>
@@ -538,80 +393,367 @@ with tab_mix:
             unsafe_allow_html=True,
         )
 
-        # Show active configuration breakdown table
-        display_proj_df = proj_df.copy()
-        display_proj_df["price_per_sqft"] = display_proj_df["price_per_sqft"].apply(format_inr)
-        display_proj_df["predicted_pct"] = display_proj_df["predicted_pct"].apply(lambda v: f"{v:.1f}%")
-        display_proj_df["likely_range"] = proj_df.apply(lambda r: f"{r['low_pct']:.1f}% – {r['high_pct']:.1f}%", axis=1)
-        display_proj_df["units_sold_est"] = proj_df.apply(lambda r: f"≈ {r['units_sold_est']} of {r['units']} units", axis=1)
-
-        display_proj_df = display_proj_df[[
-            "configuration", "units", "carpet_area_sqft", "price_per_sqft", "predicted_pct", "likely_range", "units_sold_est"
-        ]].rename(columns={
-            "configuration": "Config",
-            "units": "Planned Units",
-            "carpet_area_sqft": "Carpet (sq ft)",
-            "price_per_sqft": "Price/sq ft",
-            "predicted_pct": "Forecast %",
-            "likely_range": "Likely Range",
-            "units_sold_est": "Units Sold Est.",
-        })
-        st.dataframe(display_proj_df, use_container_width=True, hide_index=True)
     else:
-        st.warning("Please enter at least one unit configuration with units > 0 to view the whole-project forecast.")
+        # --- 4. MIXED MODE PREDICTION ---
+        cfg_rows = []
+        total_tower_units = 0
+        total_tower_sold = 0
+        weighted_point_sum = 0.0
+        weighted_low_sum = 0.0
+        weighted_high_sum = 0.0
+        total_sales_val_cr = 0.0
+        cfg_inputs_map = {}
+
+        for cfg in mixed_configs:
+            d = mixed_details[cfg]
+            cfg_u = d["units"]
+            cfg_c = d["carpet_area"]
+            cfg_p = d["price_psf"]
+
+            cfg_inp = {
+                **shared_inputs,
+                "configuration": cfg,
+                "carpet_area_sqft": cfg_c,
+                "price_per_sqft": cfg_p,
+                "total_units": cfg_u,
+            }
+            cfg_inputs_map[cfg] = cfg_inp
+
+            pt, lo, hi = forecaster.predict(cfg_inp, bundle)
+            sold = int(round(cfg_u * pt / 100.0))
+            val_cr = (sold * cfg_c * cfg_p) / 1e7
+
+            total_tower_units += cfg_u
+            total_tower_sold += sold
+            weighted_point_sum += cfg_u * pt
+            weighted_low_sum += cfg_u * lo
+            weighted_high_sum += cfg_u * hi
+            total_sales_val_cr += val_cr
+
+            cfg_rows.append({
+                "Configuration": cfg,
+                "Units": cfg_u,
+                "Carpet (sq ft)": f"{cfg_c:,}",
+                "Price/sq ft": format_inr(cfg_p),
+                "Forecast %": f"{pt:.1f}%",
+                "Likely range": f"{lo:.1f}% – {hi:.1f}%",
+                "Units expected to sell": f"≈ {sold}",
+                "Sales value (₹ cr)": f"₹{val_cr:.2f} cr",
+            })
+
+        whole_point = weighted_point_sum / total_tower_units if total_tower_units > 0 else 0.0
+        whole_low = weighted_low_sum / total_tower_units if total_tower_units > 0 else 0.0
+        whole_high = weighted_high_sum / total_tower_units if total_tower_units > 0 else 0.0
+
+        if whole_point > 40.0:
+            badge_html = '<span class="badge badge-fast">🟢 Fast Pace (>40%)</span>'
+        elif whole_point >= 20.0:
+            badge_html = '<span class="badge badge-moderate">🟡 Moderate Pace (20–40%)</span>'
+        else:
+            badge_html = '<span class="badge badge-slow">🔴 Slow Pace (<20%)</span>'
+
+        # Main forecast card in Mixed mode
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <div style="color: #475569 !important; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
+                            Whole-Tower 12-Month Absorption Forecast (Units-Weighted)
+                        </div>
+                        <div class="metric-headline" style="color: #0f172a !important; font-size: 2.6rem !important; font-weight: 800 !important; margin: 4px 0 8px 0;">
+                            {whole_point:.1f}% of the tower sold in 12 months
+                        </div>
+                        <div class="metric-subline" style="color: #334155 !important; font-size: 1.05rem;">
+                            Likely range: <strong style="color: #0f172a !important;">{whole_low:.1f}% – {whole_high:.1f}%</strong> (75–80% confidence)
+                            &nbsp;·&nbsp;
+                            ≈ <strong style="color: #0f172a !important;">{total_tower_sold}</strong> of {total_tower_units} units
+                            &nbsp;·&nbsp;
+                            12-month sales value: <strong style="color: #0f172a !important;">₹{total_sales_val_cr:.2f} cr</strong>
+                        </div>
+                    </div>
+                    <div>
+                        {badge_html}
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Directly below: breakdown table + final "Whole tower" row
+        table_rows = list(cfg_rows)
+        table_rows.append({
+            "Configuration": "Whole tower",
+            "Units": total_tower_units,
+            "Carpet (sq ft)": "—",
+            "Price/sq ft": "—",
+            "Forecast %": f"{whole_point:.1f}%",
+            "Likely range": f"{whole_low:.1f}% – {whole_high:.1f}%",
+            "Units expected to sell": f"≈ {total_tower_sold}",
+            "Sales value (₹ cr)": f"₹{total_sales_val_cr:.2f} cr",
+        })
+        breakdown_df = pd.DataFrame(table_rows)
+        st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
+        st.caption("Each configuration is forecast independently; the model does not yet capture configurations competing with each other within a tower (roadmap).")
+
+    # --- 3.9 OPTIONAL: GEMINI "EXPLAIN LIKE I'M THE DEVELOPER" ---
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        try:
+            gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            gemini_api_key = None
+
+    if gemini_api_key:
+        with st.expander("✨ Executive Pitch: Explain like I'm the developer"):
+            if st.button("Generate 4-Sentence Advisory Summary"):
+                with st.spinner("Synthesizing narrative with Gemini..."):
+                    try:
+                        from google import genai
+
+                        client = genai.Client(api_key=gemini_api_key)
+                        if tower_type == "Single configuration":
+                            pitch_info = f"""
+                            - Mode: Single configuration
+                            - Micro-market: {micro_market}
+                            - Configuration: {config} ({carpet_area} sq ft)
+                            - Launch Price: Rs. {price_psf:,}/sq ft
+                            - Inventory: {total_units} units | Timeline: {months_possession} months
+                            - Forecast: {point:.1f}% (Range: {low:.1f}% – {high:.1f}%) · Rs. {sales_val_cr:.2f} cr
+                            """
+                        else:
+                            pitch_info = f"""
+                            - Mode: Mixed tower ({', '.join(mixed_configs)})
+                            - Micro-market: {micro_market}
+                            - Total Inventory: {total_tower_units} units | Timeline: {months_possession} months
+                            - Whole-Tower Forecast: {whole_point:.1f}% (Range: {whole_low:.1f}% – {whole_high:.1f}%)
+                            - Total 12-Month Sales Value: Rs. {total_sales_val_cr:.2f} cr (≈ {total_tower_sold} units)
+                            """
+
+                        prompt = f"""
+                        You are a senior real estate advisory partner at ANAROCK explaining a launch feasibility forecast to a developer's Strategy Head.
+                        Use ONLY the provided facts. Do NOT invent numbers or outside data.
+                        Clearly note that this forecast is generated by a prototype trained on synthetic data calibrated to Pune benchmarks.
+                        Provide a concise 4-sentence summary covering the forecast, primary market drivers, and one actionable pricing suggestion.
+
+                        Project Details:
+                        {pitch_info}
+                        - Developer Tier: {forecaster.TIER_LABELS[tier]}
+                        """
+                        response = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=prompt,
+                        )
+                        st.markdown(f"**Advisory Brief:**\n\n{response.text}")
+                    except Exception as e:
+                        st.error(f"Could not connect to Gemini API: {e}")
+
+    # --- 3.4 WHY THIS FORECAST (EXPLAINABILITY) ---
+    st.subheader("🔍 Why this forecast? (SHAP Attribution)")
+    st.caption("How each project factor added or subtracted points from the base expectation.")
+
+    if tower_type == "Mixed configuration":
+        explain_cfg = st.selectbox(
+            "Explain configuration:",
+            options=mixed_configs,
+            help="Select which configuration's SHAP drivers to inspect.",
+        )
+        exp_data = forecaster.explain(cfg_inputs_map[explain_cfg], bundle)
+    else:
+        explain_cfg = config
+
+    col_chart, col_bullets = st.columns([3, 2])
+
+    with col_chart:
+        # Top 6 drivers horizontal bar chart
+        top6 = exp_data["drivers"][:6][::-1]  # reverse to show largest at top
+        labels = [d["friendly_label"] for d in top6]
+        vals = [d["shap_value"] for d in top6]
+        colors = ["#10b981" if v >= 0 else "#ef4444" for v in vals]
+        custom_text = [f"{v:+.1f} pts ({d['display_val']})" for v, d in zip(vals, top6)]
+
+        fig_shap = go.Figure(
+            go.Bar(
+                x=vals,
+                y=labels,
+                orientation="h",
+                marker=dict(color=colors, line=dict(width=0)),
+                text=custom_text,
+                textposition="auto",
+                hovertemplate="<b>%{y}</b><br>Impact: %{x:+.2f} pts<extra></extra>",
+            )
+        )
+        fig_shap.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=260,
+            xaxis=dict(title="Contribution (Percentage Points)", zeroline=True, zerolinecolor="#94a3b8"),
+            yaxis=dict(autorange="reversed"),
+        )
+        st.plotly_chart(fig_shap, use_container_width=True)
+
+    with col_bullets:
+        st.markdown(f"**Top Drivers for {explain_cfg}:**")
+        for b in exp_data["bullets"]:
+            st.markdown(f'<div class="bullet-item">• {b}</div>', unsafe_allow_html=True)
+        st.caption(f"Baseline expectation across Pune data: **{exp_data['base_value']:.1f}%**.")
 
     st.divider()
 
-    st.markdown("#### 📊 Benchmark Comparison (Equal 150-Unit Scale)")
-    st.caption("How each BHK would perform under identical inventory sizing (150 units each) at the current price premium/discount.")
+    # --- TABS FOR DEEP DIVES ---
+    tab_price, tab_mix, tab_model, tab_reality = st.tabs([
+        "📈 Price What-If",
+        "📊 Unit-Mix Analysis",
+        "📋 Model Card & Trust",
+        "✅ Reality Check vs Real Projects",
+    ])
 
-    mix_df, takeaway = forecaster.unit_mix(inputs, bundle)
-    st.info(f"💡 **Takeaway:** {takeaway}")
+    # In Mixed mode, use explain_cfg or primary config for Price What-If
+    active_whatif_inputs = inputs if tower_type == "Single configuration" else cfg_inputs_map[explain_cfg]
+    whatif_point = point if tower_type == "Single configuration" else forecaster.predict(active_whatif_inputs, bundle)[0]
+    whatif_psf = price_psf if tower_type == "Single configuration" else mixed_details[explain_cfg]["price_psf"]
 
-    col_mix_table, col_mix_chart = st.columns([3, 2])
+    # ==================== TAB 1: PRICE WHAT-IF ====================
+    with tab_price:
+        st.markdown(f"### Price Sensitivity & Target Finder ({explain_cfg})")
+        st.caption(f"Evaluate how changes in price per sq ft impact predicted absorption for {explain_cfg}, holding all other features fixed.")
 
-    with col_mix_table:
-        display_df = mix_df.copy()
-        display_df["price_per_sqft"] = display_df["price_per_sqft"].apply(format_inr)
-        display_df["predicted_pct"] = display_df["predicted_pct"].apply(lambda v: f"{v:.1f}%")
-        display_df["likely_range"] = mix_df.apply(lambda r: f"{r['low_pct']:.1f}% – {r['high_pct']:.1f}%", axis=1)
-        display_df["units_sold_est"] = mix_df.apply(lambda r: f"≈ {r['units_sold_est']} of {total_units}", axis=1)
+        curve_df = forecaster.price_curve(active_whatif_inputs, bundle)
 
-        display_df = display_df[[
-            "configuration", "carpet_area_sqft", "price_per_sqft", "predicted_pct", "likely_range", "units_sold_est"
-        ]].rename(columns={
-            "configuration": "Config",
-            "carpet_area_sqft": "Carpet (sq ft)",
-            "price_per_sqft": "Price/sq ft",
-            "predicted_pct": "Forecast %",
-            "likely_range": "Likely Range",
-            "units_sold_est": "Units Sold Est.",
-        })
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    with col_mix_chart:
-        fig_mix = go.Figure(
-            go.Bar(
-                x=mix_df["configuration"],
-                y=mix_df["predicted_pct"],
-                error_y=dict(
-                    type="data",
-                    symmetric=False,
-                    array=mix_df["high_pct"] - mix_df["predicted_pct"],
-                    arrayminus=mix_df["predicted_pct"] - mix_df["low_pct"],
-                ),
-                marker_color=["#3b82f6", "#10b981", "#f59e0b", "#6366f1"],
-                text=[f"{v:.1f}%" for v in mix_df["predicted_pct"]],
-                textposition="auto",
+        fig_curve = go.Figure()
+        fig_curve.add_trace(
+            go.Scatter(
+                x=curve_df["price_per_sqft"],
+                y=curve_df["high_pct"],
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
             )
         )
-        fig_mix.update_layout(
-            title="Absorption Comparison by BHK",
-            yaxis=dict(title="12-Month Absorption %", range=[0, 100]),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=300,
+        fig_curve.add_trace(
+            go.Scatter(
+                x=curve_df["price_per_sqft"],
+                y=curve_df["low_pct"],
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(59, 130, 246, 0.15)",
+                name="Likely Range (±11.4 pts)",
+                hoverinfo="skip",
+            )
         )
-        st.plotly_chart(fig_mix, use_container_width=True)
+        fig_curve.add_trace(
+            go.Scatter(
+                x=curve_df["price_per_sqft"],
+                y=curve_df["predicted_pct"],
+                mode="lines+markers",
+                line=dict(color="#2563eb", width=3),
+                marker=dict(size=6),
+                name="Forecast Absorption %",
+                hovertemplate="Price: ₹%{x:,}/sq ft<br>Forecast: %{y:.1f}%<extra></extra>",
+            )
+        )
+        fig_curve.add_trace(
+            go.Scatter(
+                x=[whatif_psf],
+                y=[whatif_point],
+                mode="markers+text",
+                marker=dict(color="#dc2626", size=12, symbol="diamond"),
+                name="Current Price",
+                text=[f"Current: {whatif_point:.1f}%"],
+                textposition="top right",
+                hovertemplate="Current Price: ₹%{x:,}/sq ft<br>Forecast: %{y:.1f}%<extra></extra>",
+            )
+        )
+
+        fig_curve.update_layout(
+            xaxis=dict(title="Launch Price per sq ft (₹)", tickprefix="₹", tickformat=","),
+            yaxis=dict(title="12-Month Absorption %", range=[0, 100]),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=20, r=20, t=30, b=20),
+            height=380,
+        )
+        st.plotly_chart(fig_curve, use_container_width=True)
+
+        # Target Finder
+        st.markdown("#### 🎯 Target Finder")
+        col_tgt1, col_tgt2 = st.columns([1, 2])
+        with col_tgt1:
+            target_goal = st.number_input(
+                "Target 12-Month Absorption (%)",
+                min_value=10.0,
+                max_value=90.0,
+                value=35.0,
+                step=1.0,
+                help="What sales pace does the developer need to achieve in year 1?",
+            )
+        with col_tgt2:
+            target_res = forecaster.max_price_for_target(active_whatif_inputs, target_goal, bundle)
+            if target_res["achievable"]:
+                st.success(
+                    f"**Achievable Pricing Strategy:**\n\n"
+                    f"Highest price that still hits **{target_goal:.0f}%**: "
+                    f"**{format_inr(target_res['max_price_psf'])}/sq ft** ({target_res['price_vs_market_pct']:+.1f}% vs {micro_market} benchmark)."
+                )
+            else:
+                st.error(f"**Target Unreachable:** {target_res['message']}")
+
+    # ==================== TAB 2: UNIT-MIX COMPARISON ====================
+    with tab_mix:
+        # 6. Consolidated Unit-Mix Analysis tab
+        st.info("💡 To forecast a specific tower mix, choose **'Mixed configuration'** under **Tower type** in the sidebar.")
+
+        st.markdown("### 📊 Benchmark Comparison (Equal 150-Unit Scale)")
+        st.caption("How each BHK would perform under identical inventory sizing (150 units each) at the current price premium/discount.")
+
+        mix_df, takeaway = forecaster.unit_mix(active_whatif_inputs, bundle)
+        st.info(f"💡 **Takeaway:** {takeaway}")
+
+        col_mix_table, col_mix_chart = st.columns([3, 2])
+
+        with col_mix_table:
+            display_df = mix_df.copy()
+            display_df["price_per_sqft"] = display_df["price_per_sqft"].apply(format_inr)
+            display_df["predicted_pct"] = display_df["predicted_pct"].apply(lambda v: f"{v:.1f}%")
+            display_df["likely_range"] = mix_df.apply(lambda r: f"{r['low_pct']:.1f}% – {r['high_pct']:.1f}%", axis=1)
+            display_df["units_sold_est"] = mix_df.apply(lambda r: f"≈ {r['units_sold_est']} of 150", axis=1)
+
+            display_df = display_df[[
+                "configuration", "carpet_area_sqft", "price_per_sqft", "predicted_pct", "likely_range", "units_sold_est"
+            ]].rename(columns={
+                "configuration": "Config",
+                "carpet_area_sqft": "Carpet (sq ft)",
+                "price_per_sqft": "Price/sq ft",
+                "predicted_pct": "Forecast %",
+                "likely_range": "Likely Range",
+                "units_sold_est": "Units Sold Est.",
+            })
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        with col_mix_chart:
+            fig_mix = go.Figure(
+                go.Bar(
+                    x=mix_df["configuration"],
+                    y=mix_df["predicted_pct"],
+                    error_y=dict(
+                        type="data",
+                        symmetric=False,
+                        array=mix_df["high_pct"] - mix_df["predicted_pct"],
+                        arrayminus=mix_df["predicted_pct"] - mix_df["low_pct"],
+                    ),
+                    marker_color=["#3b82f6", "#10b981", "#f59e0b", "#6366f1"],
+                    text=[f"{v:.1f}%" for v in mix_df["predicted_pct"]],
+                    textposition="auto",
+                )
+            )
+            fig_mix.update_layout(
+                title="Absorption Comparison by BHK",
+                yaxis=dict(title="12-Month Absorption %", range=[0, 100]),
+                margin=dict(l=10, r=10, t=40, b=10),
+                height=300,
+            )
+            st.plotly_chart(fig_mix, use_container_width=True)
 
 # ==================== TAB 3: MODEL CARD & TRUST ====================
 with tab_model:
